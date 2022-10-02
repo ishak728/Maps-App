@@ -14,6 +14,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.room.Database
 import androidx.room.Room
+import com.google.android.gms.maps.CameraUpdateFactory
 
 import com.google.android.gms.maps.GoogleMap
 import com.google.android.gms.maps.OnMapReadyCallback
@@ -31,17 +32,18 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import io.reactivex.rxjava3.schedulers.Schedulers
 
 
-class MapsActivity : AppCompatActivity(), OnMapReadyCallback,GoogleMap.OnMapLongClickListener {
+class MapsActivity : AppCompatActivity(), OnMapReadyCallback, GoogleMap.OnMapLongClickListener {
 
     private lateinit var mMap: GoogleMap
     private lateinit var binding: ActivityMapsBinding
-    private lateinit var locationManager:LocationManager
+    private lateinit var locationManager: LocationManager
     private lateinit var locationListener: LocationListener
-    private var selectedLatitude:Double?=null
-    private var selectedLongitude:Double?=null
-    private lateinit var db:PlaceDatabase
+    private var selectedLatitude: Double? = null
+    private var selectedLongitude: Double? = null
+    private lateinit var db: PlaceDatabase
     private lateinit var placeDao: PlaceDao
-    private var compositeDisposable= CompositeDisposable()
+    private var compositeDisposable = CompositeDisposable()
+    private var placeFromMain: Place? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,100 +51,108 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback,GoogleMap.OnMapLong
         binding = ActivityMapsBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Obtain the SupportMapFragment and get notified when the map is ready to be used.
         val mapFragment = supportFragmentManager
             .findFragmentById(R.id.map) as SupportMapFragment
         mapFragment.getMapAsync(this)
 
-        /*şöyle yaparaktan da uygulaa çalışacaktır.ama yoğun bir iş olursa çöker
-        db=Room.databaseBuilder(applicationContext,PlaceDatabase::class.java,"Places")
-            .allowMainThreadQueries()
-            .build() */
 
-        //PlaceDatabase::class.java hangi sınıfa bağlanılacağını yazıyoruz
-        //Places:database ismidir
-        db=Room.databaseBuilder(applicationContext,PlaceDatabase::class.java,"Places").build()
-        placeDao=db.placeDao()
+        db = Room.databaseBuilder(applicationContext, PlaceDatabase::class.java, "Places").build()
+        placeDao = db.placeDao()
+
+        binding.saveBtn.isEnabled = false
 
 
     }
 
-
-
-
-    //harita hazır olduğunda çağrılır
     override fun onMapReady(googleMap: GoogleMap) {
 
         mMap = googleMap
-        //GoogleMap.OnMapLongClickListener'ı kullanabilmek için güncek haritamız olan mMap'e arayüzü uygulamak gerekiyor
         mMap.setOnMapLongClickListener(this)
+        val intent = intent
+        val info = intent.getStringExtra("info")
 
-/*
-        //LatLng:kordinatı tutar.kordinat diye bir sınıf var onu araştır o daha fazla bilgi tutuyor
-        val sydney = LatLng(-34.0, 151.0)
-        mMap.addMarker(MarkerOptions().position(sydney).title("Marker in Sydney"))
-        mMap.moveCamera(CameraUpdateFactory.newLatLng(sydney))
-        //konuma zoom yapar
-        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(sydney,10f))*/
+        if (info == "new") {
+            binding.saveBtn.visibility = View.VISIBLE
+            binding.deleteBtn.visibility = View.GONE
 
-        //burada "getSystemService" Any döndürdüğü için casting işlemini uygulamamız gerekir
-        locationManager= this.getSystemService(LOCATION_SERVICE) as LocationManager
-        /*LocationManager sayesinde güncel,son konumu bulabiliriz.konum sağalayıcısı vb.bir sürü şey bulunabilir.
-requestLocationUpdates sayesinde konum değiştiği her anda bize haber verilecek.
-locationListener paremetresi sayesinde konum değiştiğinde bize haber verilir.konum sağlayıcısı,ne kadar sürede
-haberverilsin ve ne kadar uzağa gidildiğinde haber versin parametrelerini biz ayarlıyoruz*/
+          /* *//* locationManager = this.getSystemService(LOCATION_SERVICE) as LocationManager
 
-/*
-        //burada it Location sınıfıdır.bu sınıf sayesinde kullanıcını o andaki latitude,longitude,yüksekliğini,hızını,zamanını
-        //vb.bir sürü şey bulabiliriz
-        locationListener=LocationListener{
-            it.
-        }*/
+           locationListener = object : LocationListener {
+                override fun onLocationChanged(location: Location) {
+                    println("latitude:" + location.latitude + "longitude" + location.longitude)
 
-        //LocationListener bir arayüzdür bundan dolayı böyle oluşturmak daha doğrudur.hem böyle yaparaktan farklı fonksiyonları
-        // da kullanabiliriz.ör:onProviderdisabled veya enabled,onStatusChanged vb.bir kaçtanen daha fonk.var
-        locationListener=object:LocationListener{
-            override fun onLocationChanged(location: Location) {
-                println("latitude:"+location.latitude+"longitude"+location.longitude)
-
-            }
-
-            //bu olmadan bazen program çalışmıyor.
-            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
-                super.onStatusChanged(provider, status, extras)
-            }
-
-        }
-
-
-        // ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),1)
-        // ActivityCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED)
-
-        //izin verilmedi
-        if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)!=PackageManager.PERMISSION_GRANTED){
-            if(ActivityCompat.shouldShowRequestPermissionRationale(this,Manifest.permission.ACCESS_FINE_LOCATION)){
-                Snackbar.make(binding.root,"need permission",Snackbar.LENGTH_INDEFINITE).setAction("give permission"){
-                    //izin verilmedii çin izin isteniyor
-                    ActivityCompat.requestPermissions(this@MapsActivity, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),1)
                 }
-            }
-            else{
-                //izin verilmediği için izin isteniyor
-                ActivityCompat.requestPermissions(this@MapsActivity, arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),1)
-            }
+
+                //bu olmadan bazen bazı uygulamalar çalışmıyor.
+                override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {
+                    super.onStatusChanged(provider, status, extras)
+                }
+
+            }*//*
+
+
+
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.ACCESS_FINE_LOCATION
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                if (ActivityCompat.shouldShowRequestPermissionRationale(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    )
+                ) {
+                    Snackbar.make(binding.root, "need permission", Snackbar.LENGTH_INDEFINITE)
+                        .setAction("give permission") {
+                            //izin verilmedii çin izin isteniyor
+                            ActivityCompat.requestPermissions(
+                                this@MapsActivity,
+                                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                                1
+                            )
+                        }
+                } else {
+                    //izin verilmediği için izin isteniyor
+                    ActivityCompat.requestPermissions(
+                        this@MapsActivity,
+                        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION),
+                        1
+                    )
+                }
+            } else {
+               *//* //izin verilmiş.
+                locationManager.requestLocationUpdates(
+                    LocationManager.GPS_PROVIDER,
+                    0,
+                    0f,
+                    locationListener
+                )
+
+
+                //konuma mavi yuvarlak bir sembol koyar
+                mMap.isMyLocationEnabled = true*//*
+
+            }*/
         }
-        else{
-            //izin verilmiş.
-           locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,0,0f,locationListener)
+        //daha önce seçilmiş place'e gidiyor
+        else {
 
-
-            //konuma mavi yuvarlak bir sembol koyar
-            mMap.isMyLocationEnabled=true
+            placeFromMain = intent.getSerializableExtra("SelectedPlace") as Place
+            placeFromMain?.let {
+                val latlng = LatLng(it.latitude, it.longitude)
+                mMap.addMarker(MarkerOptions().position(latlng).title(it.place))
+                mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(latlng, 3f))
+                binding.placeTxt.setText(it.place)
+                binding.saveBtn.visibility = View.GONE
+                binding.deleteBtn.visibility = View.VISIBLE
+            }
 
         }
+
 
     }
 
+/*
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
@@ -150,61 +160,79 @@ haberverilsin ve ne kadar uzağa gidildiğinde haber versin parametrelerini biz 
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if(requestCode==1){
-            //grantResults.size nedir araştır
-            if(grantResults.size>0&&grantResults[0]==PackageManager.PERMISSION_GRANTED){
+        if (requestCode == 1) {
 
-                //izin verilmiş.
-                //tekrardan buradan izin almak gerekiyor.kabul etmiyor.normal yoldan izin istesek yine de eklemek gerekiyor izni
-                if(ContextCompat.checkSelfPermission(this,Manifest.permission.ACCESS_FINE_LOCATION)==PackageManager.PERMISSION_GRANTED)
-                    locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,0,0f,locationListener)
-                println(1)
+            if (grantResults.size > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+
+                if (ContextCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.ACCESS_FINE_LOCATION
+                    ) == PackageManager.PERMISSION_GRANTED
+                )
+                    */
+/*locationManager.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER,
+                        0,
+                        0f,
+                        locationListener
+                    )*//*
+ println()
+
             }
-        }
-        else{
-            Toast.makeText(this@MapsActivity,"not allowed",Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this@MapsActivity, "not allowed", Toast.LENGTH_LONG).show()
         }
     }
+*/
 
-    //haritaya uzun tıklama sonrası burası çalışacaktır
+
     override fun onMapLongClick(p0: LatLng) {
-        //daha çnce var olan markerları siler
+        //daha önce var olan markerları siler
         mMap.clear()
         mMap.addMarker(MarkerOptions().position(p0).title("Place ı liked"))
-        selectedLatitude=p0.latitude
-        selectedLongitude=p0.longitude
+        selectedLatitude = p0.latitude
+        selectedLongitude = p0.longitude
+
+        binding.saveBtn.isEnabled = true
 
     }
 
 
-    fun saveBtn(view: View){
-        val place = Place(selectedLatitude!!,selectedLongitude!!,binding.placeTxt.text.toString())
+    fun saveBtn(view: View) {
+        val place = Place(selectedLatitude!!, selectedLongitude!!, binding.placeTxt.text.toString())
 
-        //compositeDisposable'ı güzelce araştır
+
         compositeDisposable.add(
             placeDao.insert(place)
-                    //schedulers rxjavadan gelen bir sınıf ve io'ya erişimi sağlıyor
+                //schedulers rxjavadan gelen bir sınıf ve io'ya erişimi sağlıyor
                 .subscribeOn(Schedulers.io())
-                    //mainthread sadece android schedulerste var
+                //mainthread sadece android schedulerste var
                 .observeOn(AndroidSchedulers.mainThread())
-                    //şöyle referans verebiliyoruz:"this::handleResponse"
+
                 .subscribe(this::handleResponse)
         )
     }
-    fun handleResponse(){
-        val intent=Intent(this,MainActivity::class.java)
+
+    fun handleResponse() {
+        val intent = Intent(this, MainActivity::class.java)
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
         startActivity(intent)
     }
 
-    fun deleteBtn(view: View){
-
+    fun deleteBtn(view: View) {
+        compositeDisposable.add(
+            placeDao.delete(placeFromMain!!)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(this::handleResponse)
+        )
     }
 
     override fun onDestroy() {
         super.onDestroy()
 
-        //kullanıp atar.yer tasarrufu sağlar.fazla yer kaplayan uygulamalarda kullanılır.mesela şu an rxjavada kullanasak da olur
+        //kullanıp atar.yer tasarrufu sağlar
+        //büyük uygulamalarda ve özllikle internetten veri çekerken çok fazla yer kaplıyor bundan dolayı composite disposable kullanılır
         compositeDisposable.clear()
     }
 }
